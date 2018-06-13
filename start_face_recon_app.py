@@ -33,7 +33,7 @@ def get_images(frame, faces_coord, shape):
         frame = op.draw_face_rectangle(frame, faces_coord)
     elif shape == "ellipse":
         faces_img = op.cut_face_ellipse(frame, faces_coord)
-    #frame = op.draw_face_ellipse(frame, faces_coord)
+        frame = op.draw_face_ellipse(frame, faces_coord)
     faces_img = op.normalize_intensity(faces_img)
     faces_img = op.resize(faces_img)
     return (frame, faces_img)
@@ -149,10 +149,95 @@ def add_person_from_file(people_folder, shape):
         cv2.waitKey(1)
         timer += 5
 
-
-
-
 def recognize_people(people_folder, shape):
+    """ Start recognizing people in a live stream with your webcam
+        
+        :param people_folder: relative path to save the person's pictures in
+        :param shape: Shape to cut the faces on the captured images:
+        "rectangle" or "ellipse"
+        :type people_folder: String
+        :type shape: String
+        """
+    try:
+        people = [person for person in os.listdir(people_folder)]
+    except:
+        print "Have you added at least one person to the system?"
+        sys.exit()
+    print "This are the people in the Recognition System:"
+    for person in people:
+        print "-" + person
+    
+    print 30 * '-'
+    print "   POSSIBLE RECOGNIZERS TO USE"
+    print 30 * '-'
+    print "1. EigenFaces"
+    print "2. FisherFaces"
+    print "3. LBPHFaces"
+    print 30 * '-'
+    
+    choice = check_choice()
+    
+    detector = FaceDetector('face_recognition_system/frontal_face.xml')
+    if choice == 1:
+        recognizer = cv2.face.EigenFaceRecognizer_create()
+        threshold = 4000
+    elif choice == 2:
+        recognizer = cv2.face.FisherFaceRecognizer_create()
+        threshold = 300
+    elif choice == 3:
+        recognizer = cv2.face.LBPHFaceRecognizer_create()
+        threshold = 85
+    images = []
+    labels = []
+    labels_people = {}
+    for i, person in enumerate(people):
+        labels_people[i] = person
+        for image in os.listdir(people_folder + person):
+            images.append(cv2.imread(people_folder + person + '/' + image, 0))
+            labels.append(i)
+    try:
+        recognizer.train(images, np.array(labels))
+    except:
+        print "\nOpenCV Error: Do you have at least two people in the database?\n"
+        sys.exit()
+
+    video = VideoCamera()
+    while True:
+        frame = video.get_frame()
+        faces_coord = detector.detect(frame, False)
+        if len(faces_coord):
+            frame, faces_img = get_images(frame, faces_coord, shape)
+            for i, face_img in enumerate(faces_img):
+                if __version__ == "3.1.0":
+                    collector = cv2.face.MinDistancePredictCollector()
+                    recognizer.predict(face_img, collector)
+                    conf = collector.getDist()
+                    pred = collector.getLabel()
+                else:
+                    pred, conf = recognizer.predict(face_img)
+                print "Prediction: " + str(pred)
+                print 'Confidence: ' + str(round(conf))
+                print 'Threshold: ' + str(threshold)
+                if conf < threshold:
+                    cv2.putText(frame, labels_people[pred].capitalize(),
+                                (faces_coord[i][0], faces_coord[i][1] - 2),
+                                cv2.FONT_HERSHEY_PLAIN, 1.7, (206, 0, 209), 2,
+                                cv2.LINE_AA)
+                else:
+                    cv2.putText(frame, "Unknown",
+                                (faces_coord[i][0], faces_coord[i][1]),
+                                cv2.FONT_HERSHEY_PLAIN, 1.7, (206, 0, 209), 2,
+                                cv2.LINE_AA)
+
+        cv2.putText(frame, "ESC to exit", (5, frame.shape[0] - 5),
+            cv2.FONT_HERSHEY_PLAIN, 1.2, (206, 0, 209), 2, cv2.LINE_AA)
+        cv2.imshow('Video', frame)
+        if cv2.waitKey(100) & 0xFF == 27:
+            sys.exit()
+
+
+
+def recognize_people_from_external_video(people_folder, shape):
     """ Start recognizing people in a live stream with your webcam
 
     :param people_folder: relative path to save the person's pictures in
